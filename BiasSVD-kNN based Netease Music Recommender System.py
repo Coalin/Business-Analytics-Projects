@@ -159,7 +159,3 @@ ax2.plot(x, RMSE, 'r')
 ax2.set_ylabel('RMSE')
 
 plt.show()
-
-
-
-
