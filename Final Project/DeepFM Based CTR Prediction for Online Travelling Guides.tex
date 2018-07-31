@@ -1,0 +1,773 @@
+\documentclass{article}
+
+\usepackage[nonatbib,final]{nips_2017}
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{microtype}      
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\newtheorem{proposition}{Proposition}
+\newtheorem{theorem}{Theorem}
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+\title{DeepFM Based CTR Prediction \\
+for Online Travelling Guides:\\
+A Case Study of Xtrip 
+\thanks{This is the final project paper for the course \emph{Business Analytics} (DATA630005) completed in \emph{School of Data Science, Fudan University}. \emph{Xtrip} is an anonymous online travel agency and the whole dataset is not provided according to the confidentiality (a smaller sample set will be provided of which features may be a little different). You can refer to \url{https://github.com/Coalin/Business-Analytics-Projects} for any updates of the codes and documents for the final project, as well as my previous team projects.
+}
+}
+
+\author{
+	Zhou, Jing\\
+	School of Data Science\\
+	Fudan University\\
+	220 Handan Road, Yangpu District, Shanghai\\
+	\texttt{jingzhou17@fudan.edu.cn}\\
+}
+
+\begin{document}	
+	\maketitle
+	\begin{abstract}
+		The understanding of costumer behavior has become a critical and challenging management science issue, among which the prediction for CTR is of vital importance for online agencies. To be more specific, we take \emph{Xtrip}, an online travelling agency (OTA) as an example to predict its CTR for online travelling guide articles. In this paper, we adopt an end-to-end model called \emph{DeepFM} that is able to emphasize both low- and high-order feature interactions in use, which is a combination of factorization machines and deep neural networks. The evaluation step contains a 3-fold cross validation based on the metric of \emph{Normalized Gini}, against two baseline models: \emph{FM} and \emph{DNN}. The results show that \emph{DeepFM} have a better performance. In addition, the business solutions for \emph{Xtrip} are illustrated, including \emph{the Current Business Applications} (Understanding of costumer behavior, Recommendation of current travelling guides and Sorting with different travelling guides under the same theme) and \emph{Further Analysis of Business Models} (Function of travelling guides, Business solutions facing the cold start and Features updation of time-to-time updation).
+	\end{abstract}
+	
+	\section{Introduction}
+	\label{sec:intro}
+
+	\subsection{General Vision: Consumer Behavior Understanding}
+	\label{sec:cbu}	
+	The understanding of consumer behavior has become a critical and challenging management science issue. It is the study of individuals, groups, or organizations and all the activities associated with the purchase, use and disposal of goods and services, including the consumer's emotional, mental and behavioral responses that precede or follow these activities~\cite{Hawkins04:Consumer}. 
+
+	The study of consumer behaviour is concerned with all aspects of purchasing behaviour - from pre-purchase activities through to post-purchase consumption, evaluation and disposal activities. It is also concerned with all persons involved, either directly or indirectly, in purchasing decisions and consumption activities. Consumer behaviour entails all activities associated with the purchase, use and disposal of goods and services, including the consumer's emotional, mental and behavioural responses that precede or follow these activities. The term, consumer, can refer to individual consumers or organisational consumers. 
+
+	Consumer behaviour is concerned with: \\
+
+	(a) \emph{Purchase activities}: the purchase of goods or services; how consumers acquire products and services, and all the activities leading up to a purchase decision, including information search, evaluating goods and services and payment methods including the purchase experience;\\
+
+    (b) \emph{Use or consumption activities}: concerns the who, where, when and how of consumption and the usage experience, including the symbolic associations and the way that goods are distributed within families or consumption units;\\
+
+    (c) \emph{Disposal activities}: concerns the way that consumers dispose of products and packaging; may also include reselling activities such as eBay and second-hand markets.~\cite{deaton80:economics, schofer01:word, sheth85:history}
+
+	Research has shown that consumer behaviour (e.g., whether a consumer will click into a particularly travelling guide passage) is difficult to predict, even for experts in the field. However, new research methods such as machine learning and neural networks are shedding new light on how consumers make decisions.
+
+    \subsection{Business Background}
+    \label{sec:bb}
+
+    \subsubsection{Xtrip: An Online Travel Agency}
+    \label{sec:ota}
+    
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=100mm]{ota.jpg}
+		\caption{\small{Market Revenue Scale and Growth Rate of Chinese OTA Market(2012-2019)~\cite{ota}}}
+		\label{fig:ota}
+	\end{figure}
+
+	\emph{Xtrip} is a provider of travel services including accommodation reservation, transportation ticketing, packaged tours and corporate travel management. In short, it is an OTA, which stands for online travel agency that sells travel packages to customers on behalf of global consolidators of airlines, hotels, holiday packages, car rentals, cruise lines, railways and sightseeing packages. 
+
+	The business model of Online Travel Agency is relatively different than a normal retail business. OTA would never keep inventories in hand, rather options are searched based on client’s request and booking is done at client affirmation. In B2C, clients can also search and book the tickets and packages on the online travel portal. 
+
+	\emph{Figure~\ref{fig:ota}} takes a glance at the market revenue scale and growth rate of the Chinese OTA market. It shows that the market revenue scale is increasing at a steady growth rate of approximately 20\% annually.
+
+    On top of that, \emph{Xtrip} is recognized as a proponent of scientific management in using rigorous data analysis in managerial decision making. 
+
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=50mm]{travel_guide.jpg}
+		\caption{\small{Travelling Guide Passages Pushed in XTrip APP}}
+		\label{fig:bb}
+	\end{figure}
+
+    \subsubsection{Target: Increasing Click Through Rate}
+    \label{sec:ctr}
+	One example of this is the prediction of click through rate (CTR) on travelling guide passages. 
+
+	In Internet marketing, \emph{CTR} stands for \emph{click through rate}: a metric that measures the number of clicks advertisers receive on their ads per number of impressions. You can use CTR to gauge which ads and keywords are successful for you and which need to be improved. The more your keywords and ads relate to each other and to your business, the more likely a user is to click on your ad after searching on your keyword phrase.
+
+    \subsubsection{Traffic Attracting Product: Travelling Guides}
+    \label{sec:tg}
+
+	In addition to advertising, other business products such as travelling guide passages also need to take CTR into consideration. Different individuals may have various taste towards travelling. Therefore, it is wise to send different travelling guide passages to them according to there preference instead of sending them with homogenous ones (e.g., the hottest guides). For example, \emph{Figure ~\ref{fig:gc}} shows the passages the author's personal account has been recently recommended. Three guides are listed at the top of the page, including: 
+
+	(a)\emph{ Let the Sea, Blue your Life};\\
+	(b)\emph{ Seek the Journey, Far Away From Home};\\
+	(c)\emph{ Look Here! Light Luxury Trip}.
+
+	which share the following tags:
+
+	(a)\emph{ Photograph, Beach};\\
+	(b)\emph{ Folk Custom, Prairie};\\
+	(c)\emph{ Gobi Desert, Famous Mountains and Waters}.
+
+    In the circumstance above mentioned, agorithms on prediction on the interest point each individual may have, as well as the prediction on the click through rate an individual to an specific passage is of critical importance to an enterprise such as \emph{Xtrip}. The quality of the article pushed decides whether the user would click into it or just slice away. 
+
+    From the perspective of myself, I may click into the first passage due to my apetite for sea and beach journey. The third guide, however, may not be able to raise my interest because it is a little too hot considering a journey to the \emph{Gobi} or \emph{Desert}. In other words, these are not my point of interest and the algorithms concerning the click through action is not accurate enrough, so as to push to me unuseful or relevant information.
+
+    \subsubsection{Profit Pattern: Relevant Products Embedding}
+    \label{sec:pprp}
+    
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=50mm]{guide_content.jpg}
+		\caption{\small{Travelling Guides Content}}
+		\label{fig:gc}
+	\end{figure}
+
+	As can be seen in \emph{Figure~\ref{fig:gc}}, the action of click into the passage may bring with potential buging conduct. When we click into this passage, an amount of travelling products which are relevant to the theme would be pushed to us and may bring the enterprise with potential income. 
+
+	Take the first travelling guide passage \emph{Let the Sea, Blue your Life} as an example. The theme of this guide is relevant to photograph and beach, and its content is around the introduction of islands in Southeast Asian. 
+
+	Based on the contents above, \emph{Xtrip} provides a self-run travelling product of package tour with the name of \emph{6 days and 4 nights in Bali, Indonesia}. The price is listed as $14,038$ Yuan with the keywords of this product as \emph{Bedroom Pool Villa}, \emph{Renaissance Phuket Resort \& Spa}. It also gives a bottom of \emph{Go tickting} for the convenience of direct purchasing. The readers, as a potential traveller, may have a high chance to purchase travelling products if he or she were impressed by the article and has a corresponding travel interest and plan recently. 
+
+	In this paper, however, we would not be focused on the recommendation of the travelling product, but on the prediction of whether an individual costumer would click through one specific travelling guide, or named the CTR. With the rise of CTR, the exposure of the content increases because of the fact that the costumer would not be able to get in touch with the travelling products (or in other words, the ads) before click through the passage title. Therefore, one significant aspect for an individual to get to know about the potential products is to increase the CTR as much as possible.  
+
+    \newpage
+    \section{Method: DeepFM}
+	\label{sec:method}
+    
+    \subsection{Quick Review of Recent Works}
+    We conduct a quick review of the recent 3 years work concerning CTR prediction for the last 3 years. The relevant work focused on the following aspects:
+
+    (1) How to extend the two aspects that may enhance the ability of depiction: \emph{the Wide aspect} and \emph{the Deep aspect}. For the wide part, Logistic Regression and Factorization Machine are usually used as part of the model.
+ 
+    (2) How to combine this above mentioned two part in one architecture.
+
+    (3) How to design the architecture for representing the 2-d interactions of the original features.
+
+    (4) How to solve the spasity of the encoded features, as well as the problem of cold start. 
+
+    The model taken into consideration is listed as follows:
+    
+    (1) \textbf{DeepFM}, Huawei, 2017;~\cite{guo17:deepfm}
+
+    The wide and deep component share the same input raw feature vector, which enables DeepFM to learn low- and high-order feature interactions simultaneously.
+
+    (2) \textbf{Deep \& Cross}, Standford, 2017;~\cite{wang17:deepcross}
+
+    It keeps the benefits of a DNN model, and beyond that, it introduces a novel cross network that is more efficient in learning certain bounded-degree feature interactions.
+
+    (3) \textbf{Wide \& Deep}, Google, 2016;~\cite{cheng16:widedeep}
+    
+    Two different inputs are required for the \emph{wide part} and \emph{deep part}, but the \emph{wide part} relies on expertise feature engineering.
+
+    (4) \textbf{PNN}, Shanghai Jiao Tong University, 2016.~\cite{qu17:pnn}
+
+    Product-based Neural Network, capture little low-order feature interactions.
+
+    A more detailed comparison of the above-mentioned models is provided in the project repo in github.com mentioned before.
+
+    \subsection{DeepFM Algorithm}
+
+    \subsubsection{Overall Architechure}
+
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=120mm]{deepfm.jpg}
+		\caption{\small{The Structure of DeepFM~\cite{guo17:deepfm}}}
+		\label{fig:deepfm}
+	\end{figure}
+
+    The model we choose to use is a Factorization Machine based neural network named DeepFM~\cite{guo17:deepfm}, which is consisted of two components: the \emph{Deep} component and the \emph{FM} conponent. 
+
+    It is important for CTR prediction to learn implicit feature interactions behind user click behaviors. Some feature interactions can be easily understood, thus can be designed by experts. However, most other feature interactions are hidden in data and difficult to identify.
+
+    The architecture of DeepFM is depicted in \emph{Figure ~\ref{fig:deepfm}}. 
+
+    \subsubsection{FM Component}
+    \label{sec:fm}
+    \emph{FM} is the short form for \emph{Factorization Machine}, which can learn feature interactions for recommendation. FM can catch order-2 feature interactions much more effectively than previous approaches especially when the dataset is sparse. In FM, the parameter of the interaction of features $i$ and $j$ is measured via the inner product of their latent vectors $V_i$ and $V_j$. Therefore, feature interactions, which are never or rarely appeared in the training data, are better learnt by FM~\cite{guo17:deepfm}. 
+
+    The output of FM is the summation of an Addition unit and a number of Inner Product units.
+
+    \begin{equation}
+    \hat{y}(\mathbf{x}) := w_0 + \sum_{i=1}^{n} w_i x_i + \sum_{i=1}^{n} \sum_{j=i+1}^{n} \langle \mathbf{v}_i, \mathbf{v}_j \rangle x_i x_j \qquad 
+    \text{Equation Source: ~\cite{rendle12:fm}}
+    \end{equation}
+
+    In the FM model, the optimization procedure for the latter part is described in \emph{Equation ~\ref{align:fm}}.
+
+	\begin{align}
+	\label{align:fm}
+ 	\sum_{i=1}^n \sum_{j=i+1}^n(<v_i,v_j>x_ix_j) &= \frac12 \sum_{i=1}^n \sum_{j=1}^n(<v_i,v_j>x_ix_j) - \frac12 \sum_{i=1}^n<v_i,v_i>x_ix_i\\
+ 	& =\frac12(\sum_{i=1}^n \sum_{j=1}^n\sum_{f=1}^k(v_{i,f}v_{j_f}x_ix_j)-\sum_{i=1}^n\sum_{f=1}^k(v_{i,f}v_{i,f}x_ix_i)) \\ 
+ 	& = \frac12\sum_{f=1}^k((\sum_{i=1}^nv_{i,f}x_i)(\sum_{j=1}^nv_{j,f}x_j)-\sum_{i=1}^nv_{i,f}^2x_i^2) \\
+ 	& = \frac12\sum_{f=1}^k((\sum_{i=1}^nv_{i,f}x_i)^2-\sum_{i=1}^nv_{i,f}^2x_i^2) \\
+ 	\text{Equation Source: ~\cite{rendle12:fm}}
+	\end{align}
+
+
+    \subsubsection{Deep Component}
+    \label{sec:dnn}
+    The \emph{Deep Component} in DeepFM is a feedforward full connected neural network to learn high-order feature interactions. Because the vector feed to the network is highly sparse, it is necessary to put them through an embedding layer which converts the high-dimensional vector to low-dimensional, so as to tranform sparse features into dense features. 
+
+    The structure for the embedding layer is depicted in \emph{Figure ~\ref{fig:embedding}} and the detailed structure for the deep neural network is illustrated in \emph{Section ~\ref{sec:exper}}.
+
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=100mm]{embedding.jpg}
+		\caption{\small{The Structure of Embedding Layer~\cite{guo17:deepfm}}}
+		\label{fig:embedding}
+	\end{figure}
+
+    \newpage
+    \section{Experiments}
+	\label{sec:exper}
+    Due to the lack of enough commputation resources, we sliced one-week length data from the Spark platform ranged from 10 July to 16 July, which is joint with three individual tables concerning \emph{Action}, \emph{User Profile Information} and \emph{Travelling Guides Information} respectively. The frequency of daily samples is summarized as \emph{Table ~\ref{ta:frequency}}
+
+    \begin{table}[!h]
+		\centering
+		\small{
+		    \caption{Daily Frequency of Samples}
+			\begin{tabular}{cc}
+				\toprule
+				\textbf{Date}  & \textbf{Sample Frequency}\\ 
+				\midrule
+				2018-07-10	&263,697 \\
+                2018-07-11	&423,907 \\
+                2018-07-12	&439,881 \\
+				2018-07-13	&401,415 \\
+				2018-07-14	&400,585 \\
+				2018-07-15	&403,090 \\
+				2018-07-16	&404,442 \\
+			\bottomrule 
+			\end{tabular}
+			
+			\label{ta:frequency}
+		}
+	\end{table}
+
+	\subsection{Data Description}
+    The raw data holds the size of \emph{1.77} GB with \emph{2,737,016} rows and \emph{48} columns. 
+
+    The aim is to make predictions of the \textbf{Label}, which means whether or not the user clicks the travelling guide passage after it has been exposured. It is a binary object, in which \textbf{1} means positive(clicked into the article) and \textbf{0} means negative(ignored after exposed to). 
+
+    \textbf{Samples Need to be Removed}: In our experiment, if an individual conduct a series of deed as \emph{Clicked-Ignored} in a short time (7 days), the latter is not recongized as the negative sample.
+
+    The field of the features can be concluded in \emph{Table ~\ref{ta:field}}.
+
+    \begin{table}[!h]
+		\centering
+		\small{
+		    \caption{Field(Category) of the Features}
+			\begin{tabular}{cc}
+				\toprule
+				\textbf{Index}  & \textbf{Feature Field}\\ 
+				\midrule
+				1          & ID Information \\ 
+				2          & Basic Information of Travelling Guides \\ 
+				3          & Statistic Information of Travelling Guides \\
+				4          & Short-term Preference of Users \\
+				5          & Profile of Travelling Guides \\
+				6          & User Profile \\
+				7          & Real-time Exposure Features \\
+				8          & Matching Score (Derived Features) \\
+				9          & Time Related Features\\
+			\bottomrule 
+			\end{tabular}			
+			\label{ta:field}
+		}
+	\end{table}
+
+	\subsection{Feature Engineering}
+
+    \subsubsection{Feature Classification and Selection}
+
+    After manual selection, 31 of these 48 features, as well as the 2 ID information related features and 1 label feature are retained and segmented into several tables, which may have obvious or latent relevance with users' click behavior. The variables are classified into \emph{Categorical Features} and \emph{Categorical Features}. For the convenience of further processing, we separate the \emph{Categorical Features} into \emph{String-like} and \emph{Number-like}.  
+    
+    \begin{table}[!h]
+		\centering
+		\small{
+		    \caption{Categorical Features (String-like)}
+			\begin{tabular}{ccc}
+				\toprule
+				\textbf{Index}  & \textbf{Feature Name}  &\textbf{Meaning or Field}\\ 
+				\midrule
+				7          & Productpreference & The product preference for the user\\ 
+				9          & Identity          & The identity of the user\\
+ 				12         & Emailtyoe         & The e-mail type of the user\\ 
+				18         & Sourcepreference  & The source preference of the user\\
+				20         & Useros            & Android, iPhone or iPad\\
+			\bottomrule 
+			\end{tabular}
+			
+			\label{ta:cfs}
+		}
+	\end{table}
+
+    \begin{table}[!h]
+		\centering
+		\small{
+		    \caption{Categorical Features (Number-like)}
+			\begin{tabular}{ccc}
+				\toprule
+				\textbf{Index}  & \textbf{Feature Name}  &\textbf{Meaning or Field}\\ 
+				\midrule
+				8          & Crown                & User Profile \\ 
+				10         & Secretary            & User Profile \\ 
+				11         & Agent                & User Profile \\
+				13         & Spendtendency        & The spend tendency of the user \\
+				14         & Old\_htlcust         & User Profile \\
+				22         & Churnindex\_pay      & Statistic Information of Travelling Guides \\
+				23         & Phonetype            & The phone type of the user \\
+				26         & Sourcetype           & The source type of the article \\
+				28         & Isoriginality        & Whether the article is original or reprint\\
+				39         & Isvalid              & Profile of travelling guides \\        
+			\bottomrule 
+			\end{tabular}
+			
+			\label{ta:cfn}
+		}
+	\end{table}
+
+	\begin{table}[!h]
+		\centering
+		\small{
+		    \caption{Numerical Features}
+			\begin{tabular}{ccc}
+				\toprule
+				\textbf{Index}  & \textbf{Feature Name}  &\textbf{Meaning or Field}\\ 
+				\midrule
+				15          & Festival\_p        & The points added considering the festival buff \\ 
+				16          & Weekend\_p         & The points added considering the weekend buff \\ 
+				17          & Grade              & Profile of Travelling Guides \\ 
+				19          & Vacation\_p        & The points added considering the Vacation buff \\  
+				21          & Staggerfestival\_p & The points added considering the Staggerfestival buff \\ 
+				35          & Vistinum           & The visit number of the article \\ 
+				36          & Likenum            & The like number of the article \\
+				37          & Commentnum         & The comment number of the article \\
+				45          & Hotdegree          & The hot degree of the article \\
+			\bottomrule 
+			\end{tabular}
+			
+			\label{ta:numf}
+		}
+	\end{table}
+    
+    \begin{table}[!h]
+		\centering
+		\small{
+		    \caption{Multi Categorical Features}
+			\begin{tabular}{ccc}
+				\toprule
+				\textbf{Index}  & \textbf{Feature Name}  &\textbf{Meaning or Field}\\ 
+				\midrule
+				29          & Associatedestcities        & Destination of the guides (in city field) \\ 
+				30          & Associatepois              & Destination of the guides (in point of interest field)\\
+				31          & Keyword                    & Keywords of the guides \\
+				41          & Populationgroup            & The population on group \\
+				44          & Topic                      & The topic of the guides in general \\
+				46          & Fromcity                   & The city that the user is from \\
+				47          & Tags                       & The tags to describe the user \\
+			\bottomrule 
+			\end{tabular}
+			
+			\label{ta:mcf}
+		}
+	\end{table}
+
+    \subsubsection{Feature Transformation}
+    The feature transforming method we used for categorical variables is \textbf{One-Hot Encoding}, the number of new feature equals to the sum of different values of categorical variables. The variables in demand of one-hot encoding includes string-like and number-like categorical features, as well as multi-categorical features. 
+
+    \subsubsection{Dimensionality Reduction}
+    The dimensionality reduction method we use includes the following steps:
+
+    (1) The elimination of variables with the missing rate above 70\%;
+
+    (2) The elimination of numerical variables with a correlation with the label lower than 0.1;
+
+    (3) To a categorical variable, eliminating the value which has a frequency lower than the set \emph{Threshold Parameter}.  
+
+    \subsubsection{Sample Rebalance}
+    The entire dataset of \emph{Xtrip} travelling guides includes $2,737,016$ samples, while only $131,390$ of them has a positive tag (approximately $4.8$\%). Therefore, it is of critical importance for us to conduct sample rebalancing, which consists of \textbf{oversampling} and \textbf{undersampling}. 
+    
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=80mm]{po_neg.jpg}
+		\caption{\small{Unbalanced Distribution of Positive and Negative Labels}}
+		\label{fig:pn}
+	\end{figure}
+
+    Oversampling and undersampling in data analysis are techniques used to adjust the class distribution of a data set (i.e., the ratio between the different classes/categories represented). The usual reason for oversampling is to correct for a bias in the original dataset. One scenario where it is useful is when training a classifier using labelled training data from a biased source, since labelled training data is valuable but often comes from un-representative sources.
+
+    In this paper, we choose to use \textbf{oversampling} because large volume of information would be lost if we choose to use Undersampling, considering the relative ratio between positive and negative labels being 20-1. After sample rebalancing, we split the dataset randomly into two parts: 70\% for training, while the rest 30\% for testing.
+    
+    \subsection{Structures and Configurations}
+    The detailed structures of DeepFM network and configurations of the experiments are listed as follows:
+    \subsubsection{Detailed Network Structures}
+    (1) \textbf{Embedding Size}:
+    The embedding size for the transform of sparse features to dense features is set to be $8$.
+    
+    (2) \textbf{Dropout Rate}:
+    The full connected deep layers for \emph{Deep Component} is set to have a dropout scheme for each layer with a keep ratio of $0.5$.
+    
+    (3) \textbf{Deep Layers}:
+    The \emph{Deep Component} of DeepFM is a full connected neural network with $2$ hidden layers, $64$ nodes for each layer.
+    
+    (4) \textbf{Activation Function}:
+    The activation function for the full connected neural network is all set to be \textbf{ReLU}. \emph{ReLU}, also \emph{The Rectified Linear Unit}, is the most commonly used activation function in deep learning models.
+    
+    \subsubsection{Configurations of the Experiments}
+    (1) \textbf{Epoch}:
+    The experiment is running for $100$ epoches.
+    
+    (2) \textbf{Batch Size}:
+    The batch size of the experiment is set to be $1024$.
+    
+    (3) \textbf{Learning Rate}:
+    The original learning rate of this experiment is set to be $0.001$.
+    
+    (4) \textbf{Optimizer Type}: 
+    The optimizer in use is the \textbf{Adam Optimizer}. Adam is an optimization algorithm that can used instead of the classical stochastic gradient descent procedure to update network weights iterative based in training data.
+    
+    (5) \textbf{Bach Normalization}:
+    Batch normalization is used in the experiment with a decay rate of $0.995$. Batch normalization is the normalization of the output in each hidden layer.
+    
+    (6) \textbf{Regularization}:
+    \textbf{L2 Regularization} is used with the parameter to be $0.01$.
+    
+    (7) \textbf{Random Seed}: 
+    The random seed in this experiment is all set to be $2018$.
+
+    \subsubsection{Computational Environments}
+    The experiment is running on the following environment. 
+
+    (1) \textbf{Memory}: 12G
+
+    (2) \textbf{GPU}: GeForce GTX 1060 Ti (Not used)
+
+    (3) \textbf{CPU}: 2.8 GHz Intel Core i7
+
+    CPU environment is enough for the \emph{millions} amount of dataset for there is no image or text manipalation while the 12G memory is a little tighter for multi-categorical variables' one-hot encoding because the creation and transformation of large sparse matrix.
+
+    \subsubsection{Operating Environments}
+
+    (1) \textbf{Python}: 3.6
+
+    (2) \textbf{Tensorflow}: 1.1.0
+
+    (3) \textbf{Others Elements Required}: sklearn, numpy, pandas, os, sys, pylab
+
+    \newpage
+    \section{Results}
+ 
+    \subsection{Measuring Metrics: Normalized Gini}
+
+    A more commonly used method to measure the performance in binary classification beside accurary is the ROC method. Different from accuracy, ROC analysis uses the true positive rate (TPR) and false positive rate (FPR). TPR is the proportion positive correctly classified (TP/P) and  False positive rate (FPR) is calculated by 1-TNR (TN/N). The ROC region plot TPR against FPR.~\cite{gini}
+
+    \emph{Figure ~\ref{fig:roc}} shows the example of ROC plot for classification model. ROC is used to evaluate the performance of a classifier model. The first thing to do before creating the ROC plot is creating the model. The iterative method of ROC development can be summarized into three step. 
+
+    (1) Step 1 is developing the model that can produce a score for each individual data with based on all its variable. The score usually is the probability that this data will be postitive. 
+
+    (2) Step 2 involves the data and its subsequent score is then ordered, usually in descending order (score). 
+
+    (3) The last step is plot the ROC. ~\cite{gini}
+
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=80mm]{roc.png}
+		\caption{\small{Explanation for ROC~\cite{gini}}}
+		\label{fig:roc}
+	\end{figure}
+
+    To performance of a classifier model is then calculated by calculating the Area Under Curve (AUC). The AUC score will be between 0 and 1. The higher the value of AUC, usually the better the model is. The AUC can be calculated by \emph{Figure ~\ref{fig:auc}}.
+
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=80mm]{auc.png}
+		\caption{\small{Calculation of AUC~\cite{gini}}}
+		\label{fig:auc}
+	\end{figure}
+
+	In this experiment, however, \emph{Normalized Gini} is used as our measuring metric instead of AUC. Gini calculation is closely related to the calculation of AUC and can be computed by $Gini = 2 * AUC - 1$. It has the following advantages over AUC.
+
+	(1) Using the gini coefficient sets the performance of a random classifier to a score of 0 while AUC sets it to 0.5; 
+
+	(2) The normalization improves the other end of the scale and makes the score of a perfect classifier equal to 1 rather than a maximum achievable AUC < 1. 
+
+
+    \subsection{Baseline Model I: Factorization Machine}
+    
+    Factorization machines can be compared to support vector machines (SVMs) with a polynomial kernel, according to Rendle and others. This algorithm has been well-studied and evaluated.~\cite{rendle12:fm}
+
+    FM is one of the dual components of DeepFM. You can refer to \emph{Section ~\ref{sec:fm}} for a detailed description of this baseline algorithm.
+
+    \subsection{Baseline Model II: DNN}
+
+    DNN is the other components of DeepFM. You can refer to \emph{Section ~\ref{sec:dnn}} for a detailed description of this baseline algorithm. For the fairness of the experiment, the DNN baseline model is the same as the deep component in DeepFM.
+
+    \subsection{K-fold Cross Validation}
+
+    Cross-validation, sometimes called rotation estimation or out-of-sample testing, is any of various similar model validation techniques for assessing how the results of a statistical analysis will generalize to an independent data set. It is mainly used in settings where the goal is prediction, and one wants to estimate how accurately a predictive model will perform in practice. 
+
+    In a prediction problem, a model is usually given a dataset of known data on which training is run (training dataset), and a dataset of unknown data (or first seen data) against which the model is tested (called the validation dataset or testing set). The goal of cross-validation is to test the model’s ability to predict new data that were not used in estimating it, in order to flag problems like overfitting and to give an insight on how the model will generalize to an independent dataset (i.e., an unknown dataset, for instance from a real problem).~\cite{kohavi95:cv}
+
+    In \emph{K-fold} cross-validation, the original sample is randomly partitioned into \emph{K} equal sized subsamples. Of the \emph{K} subsamples, a single subsample is retained as the validation data for testing the model, and the remaining \emph{K-1} subsamples are used as training data. The cross-validation process is then repeated \emph{K} times, with each of the \emph{k} subsamples used exactly once as the validation data. The \emph{K} results can then be averaged to produce a single estimation. 
+
+    The advantage of this method over repeated random sub-sampling is that all observations are used for both training and validation, and each observation is used for validation exactly once. 10-fold cross validation is commonly used, but in general \emph{K} remains an unfixed parameter.~\cite{mc04:kfold}
+
+    In our experiment, the \emph{K} is set to be 3. In other words, 3-fold cross validation was built.
+
+    \subsection{Results Explanation}
+    \emph{Figure~\ref{fig:result_deepfm}} shows the normalized gini results for DeepFM while \emph{Figure~\ref{fig:result_fm}} shows the result for Factorization Machines alone and \emph{Figure~\ref{fig:result_dnn}} shows the result for Deep Neural Networks alone, each conducts a 3-fold cross validation. 
+
+    A glance at the three charts illustrates that the performance of DeepFM is better than the other two baseline models for the following reasons:
+
+    (1) DeepFM is more steady than FM, the cross validation result shows that DeepFM holds a normalized gini of $0.25$ (validation set) to $0.35$ (training set), which is equivalent to the AUC value of $0.625$ to $0.675$, while the normalized gini for FM ranges from $0.24$ (validation set) to $0.32$ (training set), which is equivalent to the AUC value of $0.62$ to $0.66$.
+
+    (2) DeepFM is more accurate than DNN, the cross validation result shows that DNN holds a normalized gini of $0.25$ (validation set) to $0.3$ (training set), which is equivalent to the AUC value of $0.625$ to $0.65$.
+
+    (3) DeepFM has a higher speed of convergence than the DNN baseline model. The former converges at around \emph{Epoch $5th$} while the latter converges at around \emph{Epoch $25th$}.
+
+    (4) DeepFM has a potential to perform better.    
+
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=80mm]{DeepFM_result.png}
+		\caption{\small{Normalized Gini Results for DeepFM}}
+		\label{fig:result_deepfm}
+	\end{figure}
+
+	\begin{figure}[!h]
+		\centering
+		\includegraphics[width=80mm]{FM_result.png}
+		\caption{\small{Normalized Gini Results for FM}}
+		\label{fig:result_fm}
+	\end{figure}
+
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=80mm]{DNN_result.png}
+		\caption{\small{Normalized Gini Results for DNN}}
+		\label{fig:result_dnn}
+	\end{figure}
+
+    \newpage
+    \section{Business Solutions}
+
+    \subsection{Current Business Applications}
+    
+    \subsubsection{Understanding of Costumer Behaviors}
+    The DeepFM model we constructed can be used to make predictions of users' click through behaviors. The label in the training set is actually one specific user behavior: whether to click through the travelling guide passages or not. 
+
+    Before model training, we can have a summerization of the article list separated by the behavior of \emph{Clicking Through} and \emph{Ignoring} for each individual costumer, so as to draw a picture of what he or she is really interested in. However, this classification is based on the article exposed to the individual and may lack distinctive ability. 
+
+    The DeepFM model, howeve, helps solve the problem above mentioned in costumer understanding and prediction.
+
+    (1) Firstly, it can predict the score of a single costumer towards an article, so as to draw a list of articles not only based on the exposed ones, but on the whole passages pool. This can help to get a better understanding of the costumers' attitude not only to the current passages, but to the remaining passages that would be pushed to the users in the near future.
+
+    (2) Secondly, it can give us a more detailed understanding of costumers' appetite. With the raw data in hand, we can only distinguish between \emph{Clicking Through} or \emph{Ignoring}. In the meanwhile, by the results calculated by the DeepFM model, we can have a thorough knowledge of the detailed score that an individual has towards a single passage. In addition, to a specific costumer, it is able to tell between passages which one he or she would be most interested in and can return a list of articles, ordering by the corresponding interest score.   
+
+    \subsubsection{Recommendation of Target Travelling Guides}
+    We can apply the following steps to maximize our knowledge of the potential costumers and recommend them with the most suitable passages that appeals to their apetites. 
+
+    \emph{Figure ~\ref{fig:ba}} shows the basic procedure for the prediction of user behavior and recommendation of target guides, along with the advantages, while the following STEPS and RESULTS show a more detailed one.
+    
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=120mm]{ba.jpg}
+		\caption{\small{Basic Steps and Potential Results for the Prediction of User Behavior and Recommendation of Target Guides}}
+		\label{fig:ba}
+	\end{figure}
+
+    \textbf{STEP I}: The current amount of passages in our experiment is $580$. For each pair of costumer and passage, we can calculate a preference score according to the DeepFM model.
+
+    \textbf{STEP II}: After calculating the prefernce score, we have the knowledge of what the individual costumer like to see and we can have the predictions on whether the click through action would happen. In this step, we would re-rank the passages' id according to the preference score of the individual costumer.
+
+    \textbf{STEP III}: After re-ranking has been completed, we could draw a list of what this costumer may want to see from our passages pool, which is to say, he or she would have the highest chance of clicking through the passage to see the content after seeing this travelling guide title and picture. By setting a threshold value of \textbf{K}, we could have the \textbf{TOP-K} scored passages as our recommendation result.
+
+    \textbf{RESULT I}: The rate of click through had been predicted and personalized recommendations had been made due to the preference calculated based on DeepFM. 
+
+    \textbf{RESULT II}: The overall CTR of travelling guides, as well as the relevant travelling products, would rise and as a consequence of the travelling product embedded in the passages been given more exposure to.
+
+    \textbf{RESULT III}: The sales volumn of the travelling products would be increased, which may bring the enterprise with a better performance on revenues and profits. 
+
+    \subsubsection{Sort with Different Travelling Guides Under the Same Theme}
+
+    The recommendation of target travelling guides above mentioned is a solution in an ideal situation while the common usual practice is seperating this procedure into two steps: \textbf{Recall} and \textbf{Sort}. 
+
+    An example is \emph{Figure~\ref{fig:advance}}. Having the knowledge that one individual shows a strong preference to sea islands, we can recommend him with travelling guides under the theme of sea islands. This step of screening based on strong manual rule selection is usually called \emph{Recall}. \emph{Figure ~\ref{fig:recall}} shows a typical example of the procedure of recall. It is consist of four main methods:\\
+    (1) Strong correlation with historical behaviors;\\
+    (2) Item-based and user-based collaborative filtering;\\
+    (3) Location based recall method;\\
+    (4) Substitution method facing the shortage of feature data.
+
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=120mm]{recall.jpg}
+		\caption{\small{A Typical Example of the Recall Procedure}}
+		\label{fig:recall}
+	\end{figure}
+
+    Since it is based on specific strong manual rules, a much smaller pool of articles are formed for further manipalation.   
+
+    \begin{figure}[!h]
+		\centering
+		\includegraphics[width=50mm]{advanced.jpg}
+		\caption{\small{Destinations Sort Under the Same Theme}}
+		\label{fig:advance}
+	\end{figure}
+
+	After the recall step, another problem remaining to be solved is the order of the passages which we are going to recommend with. As a matter of fact, we can sort with different travelling guides under the same theme based on the DeepFM model we have trained previously. 
+
+	As described in the red circle of \emph{Figure~\ref{fig:advance}}, travelling guides under the theme of \emph{These islands are suitable for taking children to the waves} are sort to Sanya, Xiamen, Bali, Phuket and etc. as the eventual output to costumers. Behind the theme, there may be several topics such as \emph{Parent-children Tour}, \emph{Islands} and \emph{Seas}. This procedure, with respect to the step of \emph{Recall}, is usually called \emph{Rank}.
+
+	Together, this two procedure build the whole recommendation activity.
+    
+    \subsection{Further Analysis of the Business Models for \emph{Xtrip}}
+    \subsubsection{Function of Travelling Guides}
+    Considering the people, material and finance resources put into use when conducting travelling guides recommendations, the business models behind these wonderful guides may be based on the following advantages.
+
+    (1) \emph{Traffic Attraction}
+
+    As the selling of \emph{High-speed Railway Tickets} in Xtrip, the recommendation of travelling guides function as the attracting traffic. The travelling guides themselves are non-profitable, the products embedding in these guides' contents, however, are the key objects. 
+
+    Flexible language used in the contents bring with soft advertisements, which are more acceptable to costumers than the traditional hard advertisements, with the premise of precisely matching the needs of costumers.
+
+    (2) \emph{Brand Value Enhancement}
+
+    Travelling guides, a vital part in online travelling systems, should be paid more attention to for brand value enhancing even when there is no explicit benefits. 
+
+    (3) \emph{Product Ecosphere Construction}
+
+    As an all-round OTA, it is of significant importance for \emph{Xtrip} to integrate various resources into its app to build a comprehensive travelling platform. By pushing the travelling guides, \emph{Xtrip} can construct a better product ecosphere.
+
+    \subsubsection{Business Solutions Facing the \emph{Cold Start}}
+    Cold start concerns the issue that the system cannot draw any inferences for users or items about which it has not yet gathered sufficient information. It is common to see a user with no consumption records, no log in record and even no profile information. 
+
+    With no features as an input, the DeepFM model cannot draw a list of what he or she would like. In this circumstance, the commonly accepted method is to use passages with the highest hot degree.
+
+    \subsubsection{Features Updation for the Time-to-time Prediction}
+    According to the changing frequency of transforming, the features can be classified into the following three categories:
+
+    (1) \emph{Low-frequency Updation}
+
+    The user profile of all costumers, the basic information and the statistic features (in months and years) of all products. 
+
+    (2) \emph{Middle-frequency Updation}
+
+    The short-term preference of all costumers, the statistic features of all products (in days and weeks) and the features indicating whether the user's short-term preference matches the basic information of the product.
+
+    (3) \emph{High-frequency Updation}
+
+    Real-time features. 
+
+    Among the three categories of features, the low-frequency and middle-frequency features can both be calculated in advance and stored in the local database, for the direct calling of online services. 
+
+    \newpage
+	\section{Conclusion}
+	\label{sec:method}
+
+    \subsection{Conclusions of this Paper}
+    Costumer behavior understanding is a huge topic, as well as a critical and challenging management science issue. In this paper, we focus on the problem of costumer behavior understanding, which is specific on the domain of CTR prediction of travelling guides and a case of \emph{Xtrip} is taken for validation and illustration. The result shows that DeepFM is useful in the business analysis region of CTR prediction, and performs better than other regular models such as FM and DNN in (1) Robust; (2) Accurate; (3) High Speed of Convergence; (4) Potential to Keep Optimizing. 
+
+    As to the part of business model analysis, we look into the detailed applications of \emph{Xtrip} and illustrate the usage of the above mentioned algorithms in the field of (1) Understanding of Costumer Behaviors; (2) Recommendation of Target Travelling Guides; (3) Sort with Different Travelling Guides Under the Same Theme. 
+
+    In addition, we further analyse the bussiness models for \emph{Xtrip}. Considering the function of travelling guides, we conclude that it may include (1) Traffic Attraction; (2) Brand Value Enhancement and (3) Product Ecosphere Construction. Last but not least, we discuss the problem of \emph{Cold Strat} and \emph{Feature Updation}.
+
+    \subsection{Further Discussions}
+
+    The current usage for the \emph{NA} values in the sparse rating matrix still leaves a huge space for optimization: 
+
+    (1) The FM compoent of DeepFM is built to capture the interaction relations in sparse matrix, but it is far from perfect. 
+
+    (2) Facing the problem of cold start, the commonly used solution is to adopt contents that have a high hot degree, which also leaves problems. 
+
+    As to these problems caused by \emph{NA} values, from my perspective, the more suitable way is to improve the designing for product in order to get more information, instead of merely focusing on the improvement of algorithms. 
+
+	
+	\newpage
+	\section{Acknowledgments} This network structure is built based on the baseline project \url{https://github.com/ChenglongChen/tensorflow-DeepFM}, which provides a Tensorflow implementation of DeepFM. 
+
+	Many thanks to \emph{Dr. Hou}, professor of the course \emph{Business Analytics} (DATA630005) completed in \emph{School of Data Science, Fudan University}, for his selfless contribution and hard working for this course.
+
+	\bibliographystyle{plain}
+	
+	\begin{thebibliography}{10}
+		
+        \bibitem{Hawkins04:Consumer}
+        Hawkins and DelI.
+        \newblock Consumer behavior : building marketing strategy.
+        \newblock In {\em Consumer behavior}, pages 313-315, 2004.
+
+        \bibitem{deaton80:economics}
+        Deaton, Angus and Muellbauer, John and others.
+        \newblock Economics and consumer behavior.
+        \newblock Cambridge university press, 1980.
+
+        \bibitem{schofer01:word}
+        Sch{\"o}fer, Klaus.
+        \newblock Word-of-Mouth: Influences on the choice of Recommendation Sources.
+        \newblock diplom. de, 2001.
+
+        \bibitem{sheth85:history}
+        Sheth, Jagdish N.
+        \newblock History of consumer behavior: A marketing perspective
+        \newblock In {\em ACR Special Volumes}, 1985
+        
+        \bibitem{ota}
+        Iresearch.
+        \newblock http://www.iresearch.com.cn/, 2018.
+
+        \bibitem{guo17:deepfm}
+        Guo, Huifeng and Tang, Ruiming and Ye, Yunming and Li, Zhenguo and He, Xiuqiang.
+        \newblock DeepFM: A Factorization-Machine based Neural Network for CTR Prediction.
+        \newblock In {\em IJCAI}, 1725-1731, 2017.
+
+        \bibitem{wang17:deepcross}
+        Wang, Ruoxi and Fu, Bin and Fu, Gang and Wang, Mingliang.
+        \newblock Deep \& Cross Network for Ad Click Predictions.
+        \newblock In {\em ADKDD}, 1-7, 2017
+		
+		\bibitem{cheng16:widedeep}
+        Cheng H T, Koc L, Harmsen J, et al. 
+        \newblock Wide \& Deep Learning for Recommender Systems. 
+        \newblock 7-10, 2016
+
+        \bibitem{qu17:pnn}
+        Qu Y, Cai H, Ren K, et al. 
+        \newblock Product-Based Neural Networks for User Response Prediction.
+        \newblock IEEE, International Conference on Data Mining, 1149-1154, 2017
+
+        \bibitem{rendle12:fm}
+        Rendle, Steffen.
+        \newblock Factorization machines with libfm.
+        \newblock In {\em ACM Transactions on Intelligent Systems and Technology (TIST)}, 57, 2012.
+
+        \bibitem{kohavi95:cv}
+        Kohavi, Ron
+        \newblock A study of cross-validation and bootstrap for accuracy estimation and model selection.
+        \newblock In {\em Proceedings of the Fourteenth International Joint Conference on Artificial Intelligence}, 1137–1143, 1995.
+
+        \bibitem{gini}
+        Staesthetic.
+        \newblock https://staesthetic.wordpress.com/2014/04/14/gini-roc-auc-and-accuracy/.
+        \newblock April 14, 2014.
+
+        \bibitem{mc04:kfold}
+        McLachlan, Geoffrey J., Do, Kim-Anh; Ambroise, Christophe.
+        \newblock Analyzing microarray gene expression data.
+        \newblock In {\em Wiley}, 2004.
+
+	\end{thebibliography}
+	
+	\clearpage
+	
+	\newpage
+	
+	
+\end{document}
+
